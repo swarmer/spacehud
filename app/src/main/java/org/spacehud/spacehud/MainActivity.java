@@ -42,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
     private AtomicBoolean runBluetoothListener = new AtomicBoolean();
     private Thread bluetoothThread;
     private BluetoothSocket bluetoothSocket;
+    private boolean sensorsConnected = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,7 +73,8 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         runBluetoothListener.set(false);
         try {
-            bluetoothThread.join();
+            if (bluetoothThread != null)
+                bluetoothThread.join();
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -128,18 +130,17 @@ public class MainActivity extends AppCompatActivity {
             showFatalError("Error", e.getMessage());
         }
 
-        boolean connected = false;
-        for (int i = 0; i < 20; ++i) {
+        for (int i = 0; i < 2; ++i) {
             try {
                 bluetoothSocket.connect();
-                connected = true;
+                sensorsConnected = true;
                 break;
             } catch (IOException e) {
             }
         }
 
-        if (!connected)
-            showFatalError("Error", "Cannot connect to sensors");
+        if (!sensorsConnected)
+            return;
 
         InputStream stream = null;
         try {
