@@ -1,5 +1,6 @@
 package org.spacehud.spacehud;
 
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
@@ -26,6 +27,8 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.TextView;
 
 import java.io.IOException;
@@ -36,6 +39,7 @@ import java.nio.charset.Charset;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -53,10 +57,18 @@ public class MainActivity extends AppCompatActivity {
      * The {@link ViewPager} that will host the section contents.
      */
     private ViewPager mViewPager;
+    private AtomicBoolean runBluetoothListener = new AtomicBoolean();
+    private Thread bluetoothThread;
+    private BluetoothSocket bluetoothSocket;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+
         setContentView(R.layout.activity_main);
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
@@ -72,16 +84,25 @@ public class MainActivity extends AppCompatActivity {
         TabLayout tabLayout = (TabLayout) findViewById(R.id.tabs);
         tabLayout.setupWithViewPager(mViewPager);
 
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
-
         setupBluetooth();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        runBluetoothListener.set(false);
+        try {
+            bluetoothThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        try {
+            bluetoothSocket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        System.err.println("onDestroy called");
     }
 
     private void showFatalError(String title, String errorMessage) {
@@ -95,18 +116,7 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setIcon(android.R.drawable.ic_dialog_alert)
                 .show();
-    }
-
-    private void showMessage(String title, String message) {
-        new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setMessage(message)
-                .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int which) {
-                    }
-                })
-                .setIcon(android.R.drawable.ic_dialog_alert)
-                .show();
+        System.exit(1);
     }
 
     private void setupBluetooth() {
@@ -130,7 +140,6 @@ public class MainActivity extends AppCompatActivity {
             showFatalError("Error", "HC-06 bluetooth device not found");
         }
 
-        BluetoothSocket bluetoothSocket = null;
         UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
         try {
             bluetoothSocket = suitSensorDevice.createRfcommSocketToServiceRecord(uuid);
@@ -139,12 +148,18 @@ public class MainActivity extends AppCompatActivity {
             showFatalError("Error", e.getMessage());
         }
 
-        try {
-            bluetoothSocket.connect();
-        } catch (IOException e) {
-            e.printStackTrace();
-            showFatalError("Error", e.getMessage());
+        boolean connected = false;
+        for (int i = 0; i < 20; ++i) {
+            try {
+                bluetoothSocket.connect();
+                connected = true;
+                break;
+            } catch (IOException e) {
+            }
         }
+
+        if (!connected)
+            showFatalError("Error", "Cannot connect to sensors");
 
         InputStream stream = null;
         try {
@@ -154,11 +169,22 @@ public class MainActivity extends AppCompatActivity {
             showFatalError("Error", e.getMessage());
         }
 
+        runBluetoothListener.set(true);
+        final InputStream finalInputStreamWat = stream;
+        bluetoothThread = new Thread(new Runnable() {
+            public void run() {
+                bluetoothListener(finalInputStreamWat);
+            }
+        });
+        bluetoothThread.start();
+    }
+
+    private void bluetoothListener(InputStream inputStream) {
         StringBuilder commandBuilder = new StringBuilder();
-        while (true) {
+        while (runBluetoothListener.get()) {
             byte[] buffer = new byte[1024];
             try {
-                int count = stream.read(buffer);
+                int count = inputStream.read(buffer);
                 String message = new String(buffer, 0, count);
                 commandBuilder.append(message);
 
@@ -177,12 +203,32 @@ public class MainActivity extends AppCompatActivity {
                         commandBuilder = new StringBuilder(lines[lines.length - 1]);
                     }
                 }
-            } catch (IOException e) {
-                System.err.println(e.getMessage());
-                e.printStackTrace();
-                showFatalError("Error", e.getMessage());
+
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        beatReceived();
+                    }
+                });
+            } catch (final IOException e) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        e.printStackTrace();
+                        showFatalError("Error", e.getMessage());
+                    }
+                });
+
             }
         }
+
+        try {
+            inputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void beatReceived() {
+
     }
 
     @Override
