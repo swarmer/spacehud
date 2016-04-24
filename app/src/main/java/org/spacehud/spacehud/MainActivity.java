@@ -1,8 +1,16 @@
 package org.spacehud.spacehud;
 
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothServerSocket;
+import android.bluetooth.BluetoothSocket;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.os.SystemClock;
 import android.support.design.widget.TabLayout;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 
@@ -11,6 +19,7 @@ import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -18,6 +27,15 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import android.widget.TextView;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.charset.Charset;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -63,8 +81,109 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        setupBluetooth();
     }
 
+    private void showFatalError(String title, String errorMessage) {
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(errorMessage)
+                .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        System.exit(1);
+                    }
+                })
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
+    }
+
+    private void showMessage(String title, String message) {
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                    }
+                })
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
+    }
+
+    private void setupBluetooth() {
+        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter == null)
+            showFatalError("Error", "Bluetooth not available");
+
+        if (!bluetoothAdapter.isEnabled()) {
+            showFatalError("Error", "Bluetooth disabled");
+        }
+
+        BluetoothDevice suitSensorDevice = null;
+
+        Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+        for (BluetoothDevice device : pairedDevices) {
+            if (device.getName().equals("HC-06"))
+                suitSensorDevice = device;
+        }
+
+        if (suitSensorDevice == null) {
+            showFatalError("Error", "HC-06 bluetooth device not found");
+        }
+
+        BluetoothSocket bluetoothSocket = null;
+        UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+        try {
+            bluetoothSocket = suitSensorDevice.createRfcommSocketToServiceRecord(uuid);
+        } catch (IOException e) {
+            e.printStackTrace();
+            showFatalError("Error", e.getMessage());
+        }
+
+        try {
+            bluetoothSocket.connect();
+        } catch (IOException e) {
+            e.printStackTrace();
+            showFatalError("Error", e.getMessage());
+        }
+
+        InputStream stream = null;
+        try {
+            stream = bluetoothSocket.getInputStream();
+        } catch (IOException e) {
+            e.printStackTrace();
+            showFatalError("Error", e.getMessage());
+        }
+
+        StringBuilder commandBuilder = new StringBuilder();
+        while (true) {
+            byte[] buffer = new byte[1024];
+            try {
+                int count = stream.read(buffer);
+                String message = new String(buffer, 0, count);
+                commandBuilder.append(message);
+
+                String commands = commandBuilder.toString();
+                if (commands.contains("\n")) {
+                    String[] lines = commands.split("\\s+");
+                    if (commands.endsWith("\n")) {
+                        for (String line : lines) {
+                            System.err.println(line.replaceAll("\r", ""));
+                        }
+                        commandBuilder = new StringBuilder();
+                    } else {
+                        for (int i = 0; i < lines.length - 1; ++i) {
+                            System.err.println(lines[i].replaceAll("\r", ""));
+                        }
+                        commandBuilder = new StringBuilder(lines[lines.length - 1]);
+                    }
+                }
+            } catch (IOException e) {
+                System.err.println(e.getMessage());
+                e.printStackTrace();
+                showFatalError("Error", e.getMessage());
+            }
+        }
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
