@@ -64,13 +64,17 @@ public class MainActivity extends AppCompatActivity {
 
         TabLayout tabLayout = (TabLayout) findViewById(R.id.tabs);
         tabLayout.setupWithViewPager(mViewPager);
+    }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
         setupBluetooth();
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
+    protected void onStop() {
+        super.onStop();
         runBluetoothListener.set(false);
         try {
             if (bluetoothThread != null)
@@ -83,8 +87,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        System.err.println("onDestroy called");
     }
 
     private void showFatalError(String title, String errorMessage) {
