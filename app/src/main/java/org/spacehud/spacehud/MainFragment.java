@@ -15,6 +15,8 @@ public class MainFragment extends Fragment {
      * The fragment argument representing the section number for this
      * fragment.
      */
+    private TextView heartTextView;
+
     public MainFragment() {
     }
 
@@ -33,6 +35,16 @@ public class MainFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.main_fragment, container, false);
+        heartTextView = (TextView)rootView.findViewById(R.id.heartTextView);
+
         return rootView;
+    }
+
+    public void onBeat() {
+        heartTextView.setAlpha(1.0f);
+        heartTextView.animate()
+                .alpha(0.0f)
+                .setDuration(500)
+                .setListener(null);
     }
 }

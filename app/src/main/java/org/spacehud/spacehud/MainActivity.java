@@ -174,22 +174,28 @@ public class MainActivity extends AppCompatActivity {
                     String[] lines = commands.split("\\s+");
                     if (commands.endsWith("\n")) {
                         for (String line : lines) {
-                            System.err.println(line.replaceAll("\r", ""));
+                            if (line.startsWith("BEAT")) {
+                                runOnUiThread(new Runnable() {
+                                    public void run() {
+                                        onBeat();
+                                    }
+                                });
+                            }
                         }
                         commandBuilder = new StringBuilder();
                     } else {
                         for (int i = 0; i < lines.length - 1; ++i) {
-                            System.err.println(lines[i].replaceAll("\r", ""));
+                            if (lines[i].startsWith("BEAT")) {
+                                runOnUiThread(new Runnable() {
+                                    public void run() {
+                                        onBeat();
+                                    }
+                                });
+                            }
                         }
                         commandBuilder = new StringBuilder(lines[lines.length - 1]);
                     }
                 }
-
-                runOnUiThread(new Runnable() {
-                    public void run() {
-                        beatReceived();
-                    }
-                });
             } catch (final IOException e) {
                 runOnUiThread(new Runnable() {
                     public void run() {
@@ -208,8 +214,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void beatReceived() {
+    private Fragment getCurrentFragment() {
+        int index = ((ViewPager)findViewById(R.id.container)).getCurrentItem();
+        return mSectionsPagerAdapter.fragments[index];
+    }
 
+    public void onBeat() {
+        Fragment currentFragment = getCurrentFragment();
+
+        if (currentFragment instanceof MainFragment) {
+            ((MainFragment)currentFragment).onBeat();
+        }
     }
 
     /**
@@ -217,24 +232,22 @@ public class MainActivity extends AppCompatActivity {
      * one of the sections/tabs/pages.
      */
     public class SectionsPagerAdapter extends FragmentPagerAdapter {
+        public Fragment[] fragments;
 
         public SectionsPagerAdapter(FragmentManager fm) {
             super(fm);
+
+            fragments = new Fragment[]{
+                    MainFragment.newInstance(),
+                    HealthFragment.newInstance(),
+                    SuitFragment.newInstance(),
+                    CommunicationFragment.newInstance()
+            };
         }
 
         @Override
         public Fragment getItem(int position) {
-            switch (position) {
-                case 0:
-                    return MainFragment.newInstance();
-                case 1:
-                    return HealthFragment.newInstance();
-                case 2:
-                    return SuitFragment.newInstance();
-                case 3:
-                    return CommunicationFragment.newInstance();
-            }
-            return null;
+            return fragments[position];
         }
 
         @Override
